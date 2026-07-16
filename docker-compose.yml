@@ -1,0 +1,79 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: delivery-copilot-postgres
+    environment:
+      POSTGRES_USER: copilot
+      POSTGRES_PASSWORD: copilot123
+      POSTGRES_DB: copilotdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U copilot -d copilotdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - copilot_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: delivery-copilot-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT}
+      - DATABASE_URL=${DATABASE_URL}
+      - CHROMA_PERSIST_DIR=${CHROMA_PERSIST_DIR}
+      - EMBED_MODEL=${EMBED_MODEL}
+      - CHUNK_SIZE=${CHUNK_SIZE}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP}
+      - TOP_K_RETRIEVAL=${TOP_K_RETRIEVAL}
+      - JIRA_ADDON_ENABLED=${JIRA_ADDON_ENABLED}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - JIRA_USERNAME=${JIRA_USERNAME}
+      - JIRA_API_TOKEN=${JIRA_API_TOKEN}
+      - ENVIRONMENT=development
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+      - chroma_data:/data/chroma
+    networks:
+      - copilot_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: delivery-copilot-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+    networks:
+      - copilot_network
+
+volumes:
+  postgres_data:
+  chroma_data:
+  backend_uploads:
+
+networks:
+  copilot_network:
+    driver: bridge
